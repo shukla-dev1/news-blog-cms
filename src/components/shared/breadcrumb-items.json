@@ -1,0 +1,22 @@
+{
+  "collectionName": "components_shared_breadcrumb_items",
+  "info": {
+    "displayName": "breadcrumbItems",
+    "icon": "bulletList"
+  },
+  "options": {},
+  "attributes": {
+    "label": {
+      "type": "string",
+      "required": true
+    },
+    "url": {
+      "type": "string",
+      "required": true
+    },
+    "order": {
+      "type": "integer"
+    }
+  },
+  "config": {}
+}

@@ -1,0 +1,23 @@
+{
+  "collectionName": "components_shared_all_social_links",
+  "info": {
+    "displayName": "allSocialLinks",
+    "icon": "attachment"
+  },
+  "options": {},
+  "attributes": {
+    "twitter": {
+      "type": "string"
+    },
+    "linkedIn": {
+      "type": "string"
+    },
+    "github": {
+      "type": "string"
+    },
+    "website": {
+      "type": "string"
+    }
+  },
+  "config": {}
+}
