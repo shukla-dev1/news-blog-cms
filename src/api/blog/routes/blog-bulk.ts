@@ -20,6 +20,16 @@ export default {
         middlewares: [],
       },
     },
+    {
+      method: 'POST',
+      path: '/blogs/generate',
+      handler: 'blog.generate',
+      config: {
+        auth: false,
+        policies: [],
+        middlewares: [],
+      },
+    },
   ],
 };
 

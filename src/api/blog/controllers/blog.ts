@@ -144,6 +144,99 @@ export default factories.createCoreController('api::blog.blog', ({ strapi }) => 
     };
   },
 
+  async generate(ctx) {
+    const { topic, blogAuthorSlug, breadcrumbName } = ctx.request.body as any;
+
+    strapi.log.info(`[generate] Request received — topic: "${topic}", blogAuthorSlug: "${blogAuthorSlug ?? ''}", breadcrumbName: "${breadcrumbName ?? ''}"`);
+
+    if (!topic || typeof topic !== 'string') {
+      strapi.log.warn('[generate] Rejected: "topic" is missing or not a string');
+      return ctx.badRequest('"topic" is required');
+    }
+
+    let generated: any;
+    try {
+      strapi.log.info(`[generate] Calling Claude for topic: "${topic}"`);
+      generated = await strapi
+        .service('api::blog.blog-generate' as any)
+        .generate(topic);
+      strapi.log.info(`[generate] Claude responded — title: "${generated?.title}"`);
+    } catch (err: any) {
+      strapi.log.error('[generate] Claude API call failed:', err);
+      const status = err?.status ?? err?.statusCode;
+      const is401 =
+        status === 401 || String(err?.message ?? '').includes('401');
+      const authHint = is401
+        ? ' If the key is correct in .env, create a new key at https://console.anthropic.com/settings/keys — 401 means Anthropic rejected the credential (revoked, typo, or wrong account).'
+        : '';
+      return ctx.internalServerError(
+        `Claude generation failed: ${err?.message ?? 'Unknown error'}${authHint}`
+      );
+    }
+
+    try {
+      const data: any = {
+        title:    generated.title,
+        fullPath: generated.fullPath,
+        content:  generated.content,
+        meteData: {
+          metaTitle:             generated.meteData?.metaTitle ?? null,
+          metaDescription:       generated.meteData?.metaDescription ?? null,
+          canonicalUrl:          generated.meteData?.canonicalUrl ?? null,
+          ogTitle:               generated.meteData?.ogTitle ?? null,
+          ogDescription:         generated.meteData?.ogDescription ?? null,
+          scriptApplicationJson: generated.meteData?.scriptApplicationJson ?? null,
+        },
+      };
+
+      if (blogAuthorSlug && typeof blogAuthorSlug === 'string') {
+        strapi.log.info(`[generate] Resolving blogAuthor by slug: "${blogAuthorSlug}"`);
+        const authors = await strapi.entityService.findMany('api::blog-author.blog-author', {
+          filters: { slug: blogAuthorSlug },
+          limit: 1,
+        });
+        if (Array.isArray(authors) && authors[0]?.id) {
+          data.blogAuthor = authors[0].id;
+          strapi.log.info(`[generate] Resolved blogAuthor id: ${authors[0].id}`);
+        } else {
+          strapi.log.warn(`[generate] Author not found for slug: "${blogAuthorSlug}"`);
+          return ctx.badRequest(`Author with slug "${blogAuthorSlug}" not found`);
+        }
+      }
+
+      if (breadcrumbName && typeof breadcrumbName === 'string') {
+        strapi.log.info(`[generate] Resolving breadcrumb by name: "${breadcrumbName}"`);
+        const breadcrumbs = await strapi.entityService.findMany(
+          'api::breadcrumb-initial.breadcrumb-initial',
+          { filters: { name: breadcrumbName }, limit: 1 }
+        );
+        if (Array.isArray(breadcrumbs) && breadcrumbs[0]?.id) {
+          data.breadcrumb = breadcrumbs[0].id;
+          strapi.log.info(`[generate] Resolved breadcrumb id: ${breadcrumbs[0].id}`);
+        } else {
+          strapi.log.warn(`[generate] Breadcrumb not found for name: "${breadcrumbName}"`);
+          return ctx.badRequest(`Breadcrumb with name "${breadcrumbName}" not found`);
+        }
+      }
+
+      strapi.log.info('[generate] Saving blog entry to database');
+      const entry = await strapi.entityService.create('api::blog.blog', { data });
+      strapi.log.info(`[generate] Blog created — id: ${entry.id}, slug: "${entry.slug}"`);
+
+      ctx.body = {
+        id:       entry.id,
+        title:    entry.title,
+        slug:     entry.slug,
+        fullPath: entry.fullPath,
+      };
+    } catch (err: any) {
+      strapi.log.error('[generate] Failed to save blog entry:', err);
+      return ctx.internalServerError(
+        `Failed to save blog: ${err?.message ?? 'Unknown error'}`
+      );
+    }
+  },
+
   async downloadTemplate(ctx) {
     const headerRow = [
       'id',
