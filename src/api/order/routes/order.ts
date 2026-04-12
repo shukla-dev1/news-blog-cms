@@ -1,7 +1,44 @@
-/**
- * order router
- */
-
-import { factories } from '@strapi/strapi';
-
-export default factories.createCoreRouter('api::order.order');
+module.exports = {
+    routes: [
+        {
+            method: "GET",
+            path: "/c/orders",
+            handler: "order.find",
+            config: {
+             
+            },
+        },
+        {
+            method: "GET",
+            path: "/c/orders/:id",
+            handler: "order.findOne",
+            config: {
+             
+            },
+        },
+        {
+            method: "POST",
+            path: "/c/orders",
+            handler: "order.create",
+            config: {
+             
+            },
+        },
+        {
+            method: "PUT",
+            path: "/c/orders/:id",
+            handler: "order.update",
+            config: {
+             
+            },
+        },
+        {
+            method: "DELETE",
+            path: "/c/orders/:id",
+            handler: "order.delete",
+            config: {
+             
+            },
+        },
+    ],
+};
