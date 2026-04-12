@@ -1,31 +1,46 @@
-module.exports = {
+import { OrderCreatePayload } from "../../../../types/orders";
 
-  async findAll() {
-    return await strapi.entityService.findMany("api::order.order");
-  },
+const UID = "api::order.order";
 
-  async findOne(id) {
-    return await strapi.entityService.findOne("api::order.order", id);
-  },
+export async function findAll() {
+  return await strapi.documents(UID).findMany();
+}
 
-  async create(data) {
-    return await strapi.entityService.create("api::order.order", {
-      data,
-    });
-  },
+export async function findAllByUserId(userId: string) {
+  return await strapi.documents(UID).findMany({
+    filters: {
+      user: {
+        id: userId,
+      },
+    }
+  });
+}
 
-  async update(id, data) {
-    return await strapi.entityService.update("api::order.order", id, {
-      data,
-    });
-  },
+export async function findOne(id: string) {
+  return await strapi.documents(UID).findOne({ documentId: id });
+}
 
-  async delete(id) {
-    return await strapi.entityService.delete("api::order.order", id);
-  },
+export async function findOneByIdAndUserId(id: string, userId: string) {
+  return await strapi.documents(UID).findOne({
+    documentId: id,
+    filters: {
+      user: {
+        id: userId,
+      },
+    }
+  });
+}
 
-  async getCustomData() {
-    return { message: "From service layer" };
-  },
 
-};  
+export async function create(data: any) {
+  return await strapi.documents(UID).create({
+    data,
+  });
+}
+
+export async function update(id: string, data: any) {
+  return await strapi.documents(UID).update({
+    documentId: id,
+    data,
+  });
+}

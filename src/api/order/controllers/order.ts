@@ -1,43 +1,66 @@
 import type { Context } from "koa";
-const service = require("../services/order");
+import { OrderCreatePayload } from "../../../../types/orders";
+import {
+  create,
+  update,
+  findAllByUserId,
+  findOne,
+  findOneByIdAndUserId,
+} from "../services/order";
+import { getCreatePayloadOrderData } from "../helper";
 
 module.exports = {
 
   async find(ctx: Context) {
-    const data = await service.findAll();
+    const user = ctx.state.user;
+    if (!user?.id) {
+      return ctx.unauthorized();
+    }
+    const data = await findAllByUserId(user.id);
     ctx.send(data);
   },
 
   async findOne(ctx: Context) {
     const { id } = ctx.params;
-    const data = await service.findOne(id);
+    const user = ctx.state.user;
+    if (!user?.id) {
+      return ctx.unauthorized();
+    }
+
+    const data = await findOneByIdAndUserId(id, user.id);
+    if (!data) {
+      return ctx.notFound();
+    }
     ctx.send(data);
   },
 
   async create(ctx: Context) {
-    const user = ctx.state.user; // now will work
-    const body = ctx.request.body;
-
-    const data = await service.create({
-      ...body,
-      user: user?.id,
-    });
-
+    const user = ctx.state.user;
+    if (!user?.id) {
+      return ctx.unauthorized();
+    }
+    const bodyData = ctx.request.body.data;
+    const payload = getCreatePayloadOrderData(bodyData, user) as OrderCreatePayload;
+    const data = await create({...payload, orderStatus: 'pending'});
     ctx.send(data);
   },
 
   async update(ctx: Context) {
     const { id } = ctx.params;
-    const body = ctx.request.body;
+    const user = ctx.state.user;
+    if (!user?.id) {
+      return ctx.unauthorized();
+    }
 
-    const data = await service.update(id, body);
+    const existing = await findOneByIdAndUserId(id, user.id);
+    if (!existing) {
+      return ctx.notFound();
+    }
+    const bodyData = ctx.request.body.data;
+    const payload = getCreatePayloadOrderData(bodyData, user);
+    const data = await update(id, payload);
     ctx.send(data);
   },
 
-  async delete(ctx: Context) {
-    const { id } = ctx.params;
-    const data = await service.delete(id);
-    ctx.send(data);
-  },
 
 };

@@ -31,14 +31,6 @@ module.exports = {
             config: {
              
             },
-        },
-        {
-            method: "DELETE",
-            path: "/c/orders/:id",
-            handler: "order.delete",
-            config: {
-             
-            },
-        },
+        }
     ],
 };
