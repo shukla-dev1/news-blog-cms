@@ -45,6 +45,19 @@ export default {
       },
       permissions: [],
     });
+    app.addMenuLink({
+      to: '/bulk-json-import',
+      icon: () => '📋',
+      intlLabel: {
+        id: 'bulk-json-import.menu.label',
+        defaultMessage: 'Bulk JSON import',
+      },
+      Component: async () => {
+        const component = await import('./pages/BulkJsonImport');
+        return component;
+      },
+      permissions: [],
+    });
   },
 };
 
