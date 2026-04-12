@@ -44,7 +44,7 @@ Return a single JSON object with this exact structure:
       "@type": "Article",
       "headline": "Same as title",
       "description": "Same as metaDescription"
-    }
+    }   
   }
 }
 
