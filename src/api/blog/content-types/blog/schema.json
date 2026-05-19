@@ -40,6 +40,12 @@
       "relation": "manyToOne",
       "target": "api::breadcrumb-initial.breadcrumb-initial",
       "inversedBy": "group"
+    },
+    "blog_category": {
+      "type": "relation",
+      "relation": "manyToOne",
+      "target": "api::blog-category.blog-category",
+      "inversedBy": "blogs"
     }
   }
 }
