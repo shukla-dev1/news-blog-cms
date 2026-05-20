@@ -16,8 +16,10 @@
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.82.0",
+    "@strapi-community/cloudinary-media-library": "^1.0.3",
     "@strapi/plugin-cloud": "5.38.0",
     "@strapi/plugin-users-permissions": "5.38.0",
+    "@strapi/provider-upload-cloudinary": "^5.46.1",
     "@strapi/strapi": "5.38.0",
     "better-sqlite3": "12.4.1",
     "pg": "^8.20.0",

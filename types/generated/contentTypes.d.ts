@@ -509,6 +509,9 @@ export interface ApiBlogBlog extends Struct.CollectionTypeSchema {
     draftAndPublish: true;
   };
   attributes: {
+    bannerImage: Schema.Attribute.Media<
+      'images' | 'files' | 'videos' | 'audios'
+    >;
     blog_category: Schema.Attribute.Relation<
       'manyToOne',
       'api::blog-category.blog-category'
