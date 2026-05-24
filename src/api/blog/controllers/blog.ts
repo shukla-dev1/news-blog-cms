@@ -4,6 +4,7 @@
 
 import { factories } from '@strapi/strapi';
 import * as XLSX from 'xlsx';
+import { parsePaginationFromQuery } from '../../../utils/pagination';
 
 type BulkRow = {
   id?: number;
@@ -296,5 +297,16 @@ export default factories.createCoreController('api::blog.blog', ({ strapi }) => 
     );
 
     ctx.body = buffer;
+  },
+
+  async findNonTechnologyBlogs(ctx) {
+    const parsed = parsePaginationFromQuery(ctx.query);
+    if (parsed.ok === false) {
+      return ctx.badRequest(parsed.message);
+    }
+
+    ctx.body = await strapi
+      .service('api::blog.blog')
+      .findNonTechnologyBlogs({ page: parsed.page, pageSize: parsed.pageSize });
   },
 }));
