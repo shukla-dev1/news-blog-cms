@@ -12,7 +12,8 @@
     "start": "strapi start",
     "strapi": "strapi",
     "upgrade": "npx @strapi/upgrade latest",
-    "upgrade:dry": "npx @strapi/upgrade latest --dry"
+    "upgrade:dry": "npx @strapi/upgrade latest --dry",
+    "transfer:from": "strapi transfer --from https://growing-passion-561d93918e.strapiapp.com/admin"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.82.0",
