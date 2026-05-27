@@ -1,8 +1,7 @@
-import path from 'path';
-import { config as loadDotenv } from 'dotenv';
-import Anthropic from '@anthropic-ai/sdk';
+import OpenAI from 'openai';
 
-const DEFAULT_ANTHROPIC_BASE_URL = 'https://api.anthropic.com';
+const DEFAULT_DEEPSEEK_BASE_URL = 'https://api.deepseek.com';
+const DEFAULT_DEEPSEEK_MODEL = 'deepseek-chat';
 
 /** Strip quotes, BOM, zero-width chars, and line breaks (common copy/paste issues). */
 function sanitizeApiKey(raw: string | undefined | null): string {
@@ -17,24 +16,20 @@ function sanitizeApiKey(raw: string | undefined | null): string {
     .trim();
 }
 
-/**
- * Load `.env` from the project root with `override: true`.
- * Default dotenv does not overwrite keys already on `process.env` (e.g. empty Windows user env).
- */
 function resolveApiKeyFromEnv(): string {
-  // loadDotenv({ path: path.join(process.cwd(), '.env'), override: true });
-  // return sanitizeApiKey(process.env.ANTHROPIC_API_KEY);
-  const result = sanitizeApiKey(process.env.ANTHROPIC_API_KEY);
-  strapi.log.info(`[blog-generate] API key: "${result}"`);
-  return result;
+  return sanitizeApiKey(process.env.DEEPSEEK_API_KEY);
 }
 
 function resolveBaseUrl(): string {
-  const raw = process.env.ANTHROPIC_BASE_URL?.trim();
+  const raw = process.env.DEEPSEEK_BASE_URL?.trim();
   if (!raw) {
-    return DEFAULT_ANTHROPIC_BASE_URL;
+    return DEFAULT_DEEPSEEK_BASE_URL;
   }
   return raw.replace(/\/$/, '');
+}
+
+function resolveModel(): string {
+  return process.env.DEEPSEEK_MODEL?.trim() || DEFAULT_DEEPSEEK_MODEL;
 }
 
 const SYSTEM_PROMPT = `You are a professional blog writer and SEO expert.
@@ -74,33 +69,49 @@ Rules:
 - scriptApplicationJson must be a valid JSON-LD Article object`;
 }
 
+export interface GeneratedBlogPayload {
+  title: string;
+  fullPath: string;
+  content: string;
+  meteData?: {
+    metaTitle?: string | null;
+    metaDescription?: string | null;
+    canonicalUrl?: string | null;
+    ogTitle?: string | null;
+    ogDescription?: string | null;
+    scriptApplicationJson?: Record<string, unknown> | null;
+  };
+}
+
 export default ({ strapi }) => ({
-  async generate(topic: string) {
+  async generate(topic: string): Promise<GeneratedBlogPayload> {
     const apiKey = resolveApiKeyFromEnv();
     const baseURL = resolveBaseUrl();
+    const model = resolveModel();
 
     if (!apiKey) {
       throw new Error(
-        'ANTHROPIC_API_KEY is missing. Add it to .env and restart Strapi. ' +
-          'If ANTHROPIC_API_KEY exists in Windows (even empty), remove it or the app cannot override it without dotenv override.'
+        'DEEPSEEK_API_KEY is missing. Add it to .env and restart Strapi.'
       );
     }
 
     strapi.log.info(
-      `[blog-generate] Anthropic baseURL=${baseURL}, API key length=${apiKey.length} (never log the full key)`
+      `[blog-generate] DeepSeek baseURL=${baseURL}, model=${model}, API key length=${apiKey.length}`
     );
 
-    const anthropic = new Anthropic({ apiKey, baseURL });
+    const client = new OpenAI({ apiKey, baseURL });
 
-    const response = await anthropic.messages.create({
-      model: 'claude-sonnet-4-6',
+    const response = await client.chat.completions.create({
+      model,
       max_tokens: 4000,
-      system: SYSTEM_PROMPT,
-      messages: [{ role: 'user', content: buildUserPrompt(topic) }],
+      messages: [
+        { role: 'system', content: SYSTEM_PROMPT },
+        { role: 'user', content: buildUserPrompt(topic) },
+      ],
     });
 
-    const raw = response.content[0].type === 'text' ? response.content[0].text : '';
+    const raw = response.choices[0]?.message?.content ?? '';
     const json = raw.replace(/^```json\n?|```$/gm, '').trim();
-    return JSON.parse(json);
+    return JSON.parse(json) as GeneratedBlogPayload;
   },
 });
