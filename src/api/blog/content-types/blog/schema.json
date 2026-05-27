@@ -49,6 +49,9 @@
     },
     "bannerImageUrl": {
       "type": "string"
+    },
+    "scheduledPublishAt": {
+      "type": "datetime"
     }
   }
 }

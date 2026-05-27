@@ -532,6 +532,7 @@ export interface ApiBlogBlog extends Struct.CollectionTypeSchema {
       Schema.Attribute.Private;
     meteData: Schema.Attribute.Component<'meta.seo', false>;
     publishedAt: Schema.Attribute.DateTime;
+    scheduledPublishAt: Schema.Attribute.DateTime;
     slug: Schema.Attribute.UID<'title'>;
     title: Schema.Attribute.String;
     updatedAt: Schema.Attribute.DateTime;
