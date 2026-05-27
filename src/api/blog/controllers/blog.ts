@@ -5,11 +5,16 @@
 import { factories } from '@strapi/strapi';
 import * as XLSX from 'xlsx';
 import { parsePaginationFromQuery } from '../../../utils/pagination';
+import { CURATED_INDIA_TRENDING_TOPICS } from '../prompts/blog-generate-enhanced-prompts';
 import {
-  BlogCreateFromGeneratedError,
   createBlogFromGenerated,
 } from '../services/blog-create-from-generated';
 import type { GeneratedBlogPayload } from '../services/blog-generate';
+import type { GeneratedBlogEnhancedPayload } from '../services/blog-generate-enhanced';
+import {
+  formatDeepSeekErrorResponse,
+  mapCreateBlogError,
+} from '../utils/deepseek-errors';
 
 type BulkRow = {
   id?: number;
@@ -166,19 +171,14 @@ export default factories.createCoreController('api::blog.blog', ({ strapi }) => 
       generated = await strapi.service('api::blog.blog-generate').generate(topic);
       strapi.log.info(`[generate] DeepSeek responded — title: "${generated?.title}"`);
     } catch (err: unknown) {
-      const message = err instanceof Error ? err.message : 'Unknown error';
       strapi.log.error('[generate] DeepSeek API call failed:', err);
-      const status =
-        err && typeof err === 'object' && 'status' in err
-          ? (err as { status?: number }).status
-          : err && typeof err === 'object' && 'statusCode' in err
-            ? (err as { statusCode?: number }).statusCode
-            : undefined;
-      const is401 = status === 401 || message.includes('401');
-      const authHint = is401
-        ? ' If the key is correct in .env, create a new key at https://platform.deepseek.com/ — 401 means DeepSeek rejected the credential.'
-        : '';
-      return ctx.internalServerError(`DeepSeek generation failed: ${message}${authHint}`);
+      const { status, body } = formatDeepSeekErrorResponse(err);
+      if (status === 402) {
+        ctx.status = 402;
+        ctx.body = { error: body };
+        return;
+      }
+      return ctx.internalServerError(body);
     }
 
     try {
@@ -201,14 +201,96 @@ export default factories.createCoreController('api::blog.blog', ({ strapi }) => 
         fullPath: entry.fullPath,
       };
     } catch (err: unknown) {
-      if (err instanceof BlogCreateFromGeneratedError) {
-        if (err.code === 'AUTHOR_NOT_FOUND' || err.code === 'BREADCRUMB_NOT_FOUND') {
-          return ctx.badRequest(err.message);
-        }
+      const mapped = mapCreateBlogError(err);
+      if (mapped.badRequest) {
+        return ctx.badRequest(mapped.message);
       }
-      const message = err instanceof Error ? err.message : 'Unknown error';
       strapi.log.error('[generate] Failed to save blog entry:', err);
-      return ctx.internalServerError(`Failed to save blog: ${message}`);
+      return ctx.internalServerError(`Failed to save blog: ${mapped.message}`);
+    }
+  },
+
+  async listTrendingTopics(ctx) {
+    ctx.body = {
+      data: CURATED_INDIA_TRENDING_TOPICS,
+      meta: {
+        region: 'IN',
+        updatedAt: new Date().toISOString(),
+        count: CURATED_INDIA_TRENDING_TOPICS.length,
+      },
+    };
+  },
+
+  async generateEnhanced(ctx) {
+    const {
+      topic,
+      angle,
+      researchContext,
+      trendingTopicId,
+      blogAuthorSlug,
+      breadcrumbName,
+      publish,
+    } = ctx.request.body as Record<string, unknown>;
+
+    strapi.log.info(
+      `[generate-enhanced] topic="${topic ?? ''}" trendingTopicId="${trendingTopicId ?? ''}" angle="${angle ?? ''}"`
+    );
+
+    if (!topic || typeof topic !== 'string') {
+      return ctx.badRequest('"topic" is required');
+    }
+
+    let generated: GeneratedBlogEnhancedPayload;
+    try {
+      generated = await strapi
+        .service('api::blog.blog-generate-enhanced')
+        .generateEnhanced({
+          topic,
+          angle: typeof angle === 'string' ? angle : undefined,
+          researchContext:
+            typeof researchContext === 'string' ? researchContext : undefined,
+          trendingTopicId:
+            typeof trendingTopicId === 'string' ? trendingTopicId : undefined,
+        });
+      strapi.log.info(
+        `[generate-enhanced] DeepSeek responded — title: "${generated.title}"`
+      );
+    } catch (err: unknown) {
+      strapi.log.error('[generate-enhanced] DeepSeek API call failed:', err);
+      const { status, body } = formatDeepSeekErrorResponse(err);
+      if (status === 402) {
+        ctx.status = 402;
+        ctx.body = { error: body };
+        return;
+      }
+      return ctx.internalServerError(body);
+    }
+
+    try {
+      const entry = await createBlogFromGenerated(strapi, generated, {
+        blogAuthorSlug:
+          typeof blogAuthorSlug === 'string' ? blogAuthorSlug : undefined,
+        breadcrumbName:
+          typeof breadcrumbName === 'string' ? breadcrumbName : undefined,
+        status: publish === true ? 'published' : 'draft',
+      });
+
+      ctx.body = {
+        documentId: entry.documentId,
+        title: entry.title,
+        slug: entry.slug,
+        fullPath: entry.fullPath,
+        excerpt: generated.excerpt ?? null,
+        keywords: generated.keywords ?? [],
+        suggestedCategory: generated.suggestedCategory ?? null,
+      };
+    } catch (err: unknown) {
+      const mapped = mapCreateBlogError(err);
+      if (mapped.badRequest) {
+        return ctx.badRequest(mapped.message);
+      }
+      strapi.log.error('[generate-enhanced] Failed to save blog:', err);
+      return ctx.internalServerError(`Failed to save blog: ${mapped.message}`);
     }
   },
 

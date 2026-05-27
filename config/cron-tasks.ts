@@ -25,6 +25,21 @@ const cronTasks: Core.Config.Server['cron']['tasks'] = {
       ...(process.env.CRON_TZ ? { tz: process.env.CRON_TZ } : {}),
     },
   },
+  generateEnhancedTrendingBlog: {
+    task: async ({ strapi }) => {
+      try {
+        await strapi
+          .service('api::blog.blog-scheduler')
+          .generateEnhancedFromTrending();
+      } catch {
+        // Logged inside service; avoid crashing the cron runner
+      }
+    },
+    options: {
+      rule: process.env.CRON_BLOG_ENHANCED_RULE ?? '0 9 * * 1',
+      ...(process.env.CRON_TZ ? { tz: process.env.CRON_TZ } : {}),
+    },
+  },
 };
 
 export default cronTasks;

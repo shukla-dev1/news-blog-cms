@@ -1,11 +1,14 @@
 import type { Core } from '@strapi/strapi';
 import { BLOG_UID } from '../../../utils/blog-documents';
+import { CURATED_INDIA_TRENDING_TOPICS } from '../prompts/blog-generate-enhanced-prompts';
 import {
   BlogCreateFromGeneratedError,
   createBlogFromGenerated,
 } from './blog-create-from-generated';
+import { isInsufficientBalanceError } from './deepseek-client';
 
 let generateInProgress = false;
+let enhancedGenerateInProgress = false;
 
 function envBool(name: string, defaultValue: boolean): boolean {
   const raw = process.env[name];
@@ -136,6 +139,105 @@ export default ({ strapi }: { strapi: Core.Strapi }) => ({
       throw err;
     } finally {
       generateInProgress = false;
+    }
+  },
+
+  async generateEnhancedFromTrending() {
+    if (!envBool('CRON_BLOG_ENHANCED_ENABLED', false)) {
+      return { skipped: true, reason: 'disabled' };
+    }
+
+    if (enhancedGenerateInProgress) {
+      strapi.log.warn(
+        '[blog-scheduler] Enhanced generate skipped — previous run still in progress'
+      );
+      return { skipped: true, reason: 'in_progress' };
+    }
+
+    const minIntervalHours = envInt('CRON_BLOG_ENHANCED_MIN_INTERVAL_HOURS', 72);
+    const since = new Date(
+      Date.now() - minIntervalHours * 60 * 60 * 1000
+    ).toISOString();
+
+    const recentCount = await strapi.documents(BLOG_UID).count({
+      filters: { createdAt: { $gte: since } },
+    });
+
+    if (recentCount > 0) {
+      strapi.log.info(
+        `[blog-scheduler] Enhanced generate skipped — ${recentCount} blog(s) created in last ${minIntervalHours}h`
+      );
+      return { skipped: true, reason: 'recent_blog_exists' };
+    }
+
+    const weekIndex = Math.floor(Date.now() / (7 * 24 * 60 * 60 * 1000));
+    const trending =
+      CURATED_INDIA_TRENDING_TOPICS[
+        weekIndex % CURATED_INDIA_TRENDING_TOPICS.length
+      ];
+    const angle =
+      trending.suggestedAngles[
+        Math.floor(Math.random() * trending.suggestedAngles.length)
+      ];
+
+    enhancedGenerateInProgress = true;
+
+    try {
+      const generated = await strapi
+        .service('api::blog.blog-generate-enhanced')
+        .generateEnhanced({
+          topic: trending.title,
+          angle,
+          trendingTopicId: trending.id,
+          researchContext: `${trending.keyDetails} ${trending.whyHot}`,
+        });
+
+      const publishImmediately = envBool('CRON_BLOG_ENHANCED_PUBLISH', false);
+      const delayHours = envInt('CRON_BLOG_ENHANCED_DELAY_HOURS', 24);
+
+      let scheduledPublishAt: Date | null = null;
+      if (!publishImmediately && delayHours > 0) {
+        scheduledPublishAt = new Date(Date.now() + delayHours * 60 * 60 * 1000);
+      }
+
+      const entry = await createBlogFromGenerated(strapi, generated, {
+        blogAuthorSlug:
+          process.env.CRON_BLOG_ENHANCED_AUTHOR_SLUG?.trim() || undefined,
+        breadcrumbName:
+          process.env.CRON_BLOG_ENHANCED_BREADCRUMB?.trim() || undefined,
+        scheduledPublishAt,
+        status: publishImmediately ? 'published' : 'draft',
+      });
+
+      strapi.log.info(
+        `[blog-scheduler] Enhanced blog documentId=${entry.documentId} topic="${trending.id}" angle="${angle}"`
+      );
+
+      return {
+        skipped: false,
+        documentId: entry.documentId,
+        title: entry.title,
+        trendingTopicId: trending.id,
+        angle,
+      };
+    } catch (err) {
+      if (isInsufficientBalanceError(err)) {
+        strapi.log.error(
+          '[blog-scheduler] Enhanced generate skipped — DeepSeek insufficient balance (402)'
+        );
+        return { skipped: true, reason: 'insufficient_balance' };
+      }
+      if (err instanceof BlogCreateFromGeneratedError) {
+        strapi.log.error(`[blog-scheduler] ${err.message}`);
+      } else {
+        strapi.log.error(
+          '[blog-scheduler] generateEnhancedFromTrending failed:',
+          err
+        );
+      }
+      throw err;
+    } finally {
+      enhancedGenerateInProgress = false;
     }
   },
 });

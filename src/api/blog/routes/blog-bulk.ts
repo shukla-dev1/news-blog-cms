@@ -30,6 +30,26 @@ export default {
         middlewares: [],
       },
     },
+    {
+      method: 'GET',
+      path: '/blogs/trending-topics',
+      handler: 'blog.listTrendingTopics',
+      config: {
+        auth: false,
+        policies: [],
+        middlewares: [],
+      },
+    },
+    {
+      method: 'POST',
+      path: '/blogs/generate-enhanced',
+      handler: 'blog.generateEnhanced',
+      config: {
+        auth: false,
+        policies: [],
+        middlewares: [],
+      },
+    },
   ],
 };
 
