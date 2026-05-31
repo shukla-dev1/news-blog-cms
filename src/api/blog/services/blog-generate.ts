@@ -3,7 +3,9 @@ import {
   buildBlogGenerateUserPrompt,
 } from '../prompts/blog-generate-prompts';
 import {
+  buildDeepSeekJsonChatParams,
   createDeepSeekClient,
+  normalizeGeneratedBlogMetadata,
   parseJsonFromModelResponse,
   resolveDeepSeekBaseUrl,
   resolveDeepSeekMaxTokens,
@@ -15,7 +17,7 @@ export interface GeneratedBlogPayload {
   title: string;
   fullPath: string;
   content: string;
-  meteData?: {
+  metaData?: {
     metaTitle?: string | null;
     metaDescription?: string | null;
     canonicalUrl?: string | null;
@@ -44,17 +46,21 @@ export default ({ strapi }) => ({
 
     const client = createDeepSeekClient();
 
-    const response = await client.chat.completions.create({
-      model,
-      max_tokens: maxTokens,
-      messages: [
-        { role: 'system', content: BLOG_GENERATE_SYSTEM_PROMPT },
-        { role: 'user', content: buildBlogGenerateUserPrompt(topic) },
-      ],
-    });
+    const response = await client.chat.completions.create(
+      buildDeepSeekJsonChatParams({
+        enhanced: false,
+        messages: [
+          { role: 'system', content: BLOG_GENERATE_SYSTEM_PROMPT },
+          { role: 'user', content: buildBlogGenerateUserPrompt(topic) },
+        ],
+      })
+    );
 
     const raw = response.choices[0]?.message?.content ?? '';
     const parsed = parseJsonFromModelResponse(raw);
+    if (parsed && typeof parsed === 'object') {
+      normalizeGeneratedBlogMetadata(parsed as Record<string, unknown>);
+    }
     return parsed as GeneratedBlogPayload;
   },
 });

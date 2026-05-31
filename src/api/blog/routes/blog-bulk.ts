@@ -41,6 +41,16 @@ export default {
       },
     },
     {
+      method: 'GET',
+      path: '/blogs/generate-options',
+      handler: 'blog.listGenerateOptions',
+      config: {
+        auth: false,
+        policies: [],
+        middlewares: [],
+      },
+    },
+    {
       method: 'POST',
       path: '/blogs/generate-enhanced',
       handler: 'blog.generateEnhanced',

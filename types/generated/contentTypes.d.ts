@@ -530,7 +530,7 @@ export interface ApiBlogBlog extends Struct.CollectionTypeSchema {
     locale: Schema.Attribute.String & Schema.Attribute.Private;
     localizations: Schema.Attribute.Relation<'oneToMany', 'api::blog.blog'> &
       Schema.Attribute.Private;
-    meteData: Schema.Attribute.Component<'meta.seo', false>;
+    metaData: Schema.Attribute.Component<'meta.seo', false>;
     publishedAt: Schema.Attribute.DateTime;
     scheduledPublishAt: Schema.Attribute.DateTime;
     slug: Schema.Attribute.UID<'title'>;

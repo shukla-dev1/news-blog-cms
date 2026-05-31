@@ -37,19 +37,21 @@ export function resolveDeepSeekModel(enhanced = false): string {
   return process.env.DEEPSEEK_MODEL?.trim() || DEFAULT_DEEPSEEK_MODEL;
 }
 
+const DEFAULT_ENHANCED_MAX_TOKENS = 8192;
+
 export function resolveDeepSeekMaxTokens(enhanced = false): number {
   if (enhanced) {
-    const raw = process.env.DEEPSEEK_ENHANCED_MAX_TOKENS;
-    if (raw) {
-      const parsed = Number.parseInt(raw, 10);
-      if (!Number.isNaN(parsed) && parsed > 0) {
-        return parsed;
-      }
+    const raw = process.env.DEEPSEEK_ENHANCED_MAX_TOKENS || String(DEFAULT_ENHANCED_MAX_TOKENS);
+    const parsed = Number.parseInt(raw, 10);
+    if (!Number.isNaN(parsed) && parsed > 0) {
+      return parsed;
     }
-    return 8000;
+    return DEFAULT_ENHANCED_MAX_TOKENS;
   }
   return 4000;
 }
+
+const DEEPSEEK_REQUEST_TIMEOUT_MS = 180_000;
 
 export function createDeepSeekClient(): OpenAI {
   const apiKey = resolveDeepSeekApiKey();
@@ -61,12 +63,130 @@ export function createDeepSeekClient(): OpenAI {
   return new OpenAI({
     apiKey,
     baseURL: resolveDeepSeekBaseUrl(),
+    timeout: DEEPSEEK_REQUEST_TIMEOUT_MS,
+    maxRetries: 2,
   });
 }
 
+export function buildDeepSeekJsonChatParams(options: {
+  enhanced?: boolean;
+  messages: OpenAI.Chat.ChatCompletionMessageParam[];
+}): OpenAI.Chat.ChatCompletionCreateParamsNonStreaming {
+  const enhanced = options.enhanced ?? false;
+  return {
+    model: resolveDeepSeekModel(enhanced),
+    max_tokens: resolveDeepSeekMaxTokens(enhanced),
+    messages: options.messages,
+    response_format: { type: 'json_object' },
+    temperature: 0.4,
+  };
+}
+
+function extractJsonPayload(raw: string): string {
+  let cleaned = raw
+    .replace(/^```(?:json)?\s*/im, '')
+    .replace(/\s*```$/g, '')
+    .trim();
+
+  const start = cleaned.indexOf('{');
+  const end = cleaned.lastIndexOf('}');
+  if (start >= 0 && end > start) {
+    cleaned = cleaned.slice(start, end + 1);
+  }
+  return cleaned;
+}
+
+/** Best-effort repair when the model truncates mid-JSON (finish_reason=length). */
+function closeTruncatedJsonObject(json: string): string {
+  let repaired = json.trimEnd();
+  if (repaired.endsWith(',')) {
+    repaired = repaired.slice(0, -1);
+  }
+
+  const openBraces =
+    (repaired.match(/\{/g) ?? []).length - (repaired.match(/\}/g) ?? []).length;
+  const openBrackets =
+    (repaired.match(/\[/g) ?? []).length - (repaired.match(/\]/g) ?? []).length;
+
+  if (openBraces > 0 || openBrackets > 0) {
+    const lastChar = repaired.at(-1);
+    if (lastChar && lastChar !== '"' && lastChar !== '}' && lastChar !== ']') {
+      repaired += '"';
+    }
+    repaired += ']'.repeat(Math.max(0, openBrackets));
+    repaired += '}'.repeat(Math.max(0, openBraces));
+  }
+
+  return repaired;
+}
+
+export function isJsonParseError(err: unknown): boolean {
+  if (err instanceof SyntaxError) {
+    return true;
+  }
+  const message = err instanceof Error ? err.message : String(err ?? '');
+  return message.includes('JSON') || message.includes('Unexpected token');
+}
+
 export function parseJsonFromModelResponse(raw: string): unknown {
-  const cleaned = raw.replace(/^```json\n?|```$/gm, '').trim();
-  return JSON.parse(cleaned);
+  if (!raw.trim()) {
+    throw new Error('DeepSeek returned an empty response');
+  }
+
+  const payload = extractJsonPayload(raw);
+  const attempts = [payload, closeTruncatedJsonObject(payload)];
+  let lastError: unknown;
+
+  for (const candidate of attempts) {
+    if (!candidate) {
+      continue;
+    }
+    try {
+      return JSON.parse(candidate);
+    } catch (err) {
+      lastError = err;
+    }
+  }
+
+  throw lastError instanceof Error
+    ? lastError
+    : new Error('Failed to parse DeepSeek JSON response');
+}
+
+/** Normalize AI JSON to Strapi field `metaData` (legacy typo `meteData` still accepted). */
+export function normalizeGeneratedBlogMetadata(
+  data: Record<string, unknown>
+): void {
+  if (data.metaData != null && typeof data.metaData === 'object') {
+    return;
+  }
+  const legacy = data.meteData ?? data.metadata;
+  if (legacy != null && typeof legacy === 'object') {
+    data.metaData = legacy;
+  }
+}
+
+export function buildFallbackMetaData(
+  title: string,
+  fullPath: string
+): Record<string, unknown> {
+  const metaTitle = title.length > 60 ? `${title.slice(0, 57)}...` : title;
+  const metaDescription =
+    title.length > 160 ? `${title.slice(0, 157)}...` : title;
+  return {
+    metaTitle,
+    metaDescription,
+    canonicalUrl: fullPath,
+    ogTitle: title,
+    ogDescription: metaDescription,
+    scriptApplicationJson: {
+      '@context': 'https://schema.org',
+      '@type': 'NewsArticle',
+      headline: title,
+      description: metaDescription,
+      inLanguage: 'en-IN',
+    },
+  };
 }
 
 export function isInsufficientBalanceError(err: unknown): boolean {

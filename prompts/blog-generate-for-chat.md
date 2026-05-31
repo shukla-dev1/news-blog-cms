@@ -33,7 +33,7 @@ Return a single JSON object with this exact structure:
   "title": "The full blog post title",
   "fullPath": "/blog/url-friendly-slug-here",
   "content": "# Heading\n\nFull markdown body with headings, paragraphs, lists, and a FAQ section at the end.",
-  "meteData": {
+  "metaData": {
     "metaTitle": "SEO-optimized page title (50-60 chars)",
     "metaDescription": "Compelling meta description that summarizes the post (120-160 chars)",
     "canonicalUrl": "/blog/url-friendly-slug-here",

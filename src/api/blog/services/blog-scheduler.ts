@@ -5,6 +5,8 @@ import {
   BlogCreateFromGeneratedError,
   createBlogFromGenerated,
 } from './blog-create-from-generated';
+import { assertAiSuggestedCategoryAllowed } from './blog-generate-request-validator';
+import { listCategoryNames } from './blog-relation-resolvers';
 import { isInsufficientBalanceError } from './deepseek-client';
 
 let generateInProgress = false;
@@ -180,6 +182,17 @@ export default ({ strapi }: { strapi: Core.Strapi }) => ({
         Math.floor(Math.random() * trending.suggestedAngles.length)
       ];
 
+    const allowedCategories = await listCategoryNames(strapi);
+    if (allowedCategories.length === 0) {
+      strapi.log.warn(
+        '[blog-scheduler] Enhanced generate skipped — no blog categories in Strapi'
+      );
+      return { skipped: true, reason: 'no_categories' };
+    }
+
+    const cronCategoryName =
+      process.env.CRON_BLOG_ENHANCED_CATEGORY?.trim() || undefined;
+
     enhancedGenerateInProgress = true;
 
     try {
@@ -190,7 +203,15 @@ export default ({ strapi }: { strapi: Core.Strapi }) => ({
           angle,
           trendingTopicId: trending.id,
           researchContext: `${trending.keyDetails} ${trending.whyHot}`,
+          allowedCategories,
+          categoryName: cronCategoryName,
         });
+
+      assertAiSuggestedCategoryAllowed(
+        generated.suggestedCategory,
+        allowedCategories,
+        cronCategoryName
+      );
 
       const publishImmediately = envBool('CRON_BLOG_ENHANCED_PUBLISH', false);
       const delayHours = envInt('CRON_BLOG_ENHANCED_DELAY_HOURS', 24);
@@ -205,6 +226,7 @@ export default ({ strapi }: { strapi: Core.Strapi }) => ({
           process.env.CRON_BLOG_ENHANCED_AUTHOR_SLUG?.trim() || undefined,
         breadcrumbName:
           process.env.CRON_BLOG_ENHANCED_BREADCRUMB?.trim() || undefined,
+        categoryName: cronCategoryName,
         scheduledPublishAt,
         status: publishImmediately ? 'published' : 'draft',
       });

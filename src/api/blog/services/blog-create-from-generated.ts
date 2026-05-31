@@ -2,10 +2,16 @@ import type { Core } from '@strapi/strapi';
 import { BLOG_UID } from '../../../utils/blog-documents';
 import type { GeneratedBlogPayload } from './blog-generate';
 import type { GeneratedBlogEnhancedPayload } from './blog-generate-enhanced';
+import {
+  resolveAuthorDocumentId,
+  resolveBreadcrumbDocumentId,
+  resolveCategoryDocumentId,
+} from './blog-relation-resolvers';
 
 export interface CreateBlogFromGeneratedOptions {
   blogAuthorSlug?: string;
   breadcrumbName?: string;
+  categoryName?: string;
   scheduledPublishAt?: string | Date | null;
   status?: 'draft' | 'published';
 }
@@ -87,14 +93,14 @@ function buildBlogData(generated: GeneratedBlogPayload): Record<string, unknown>
     ...(enhanced?.bannerImageUrl
       ? { bannerImageUrl: enhanced.bannerImageUrl }
       : {}),
-    meteData: {
-      metaTitle: generated.meteData?.metaTitle ?? null,
-      metaDescription: generated.meteData?.metaDescription ?? null,
-      canonicalUrl: generated.meteData?.canonicalUrl ?? null,
-      ogTitle: generated.meteData?.ogTitle ?? null,
-      ogDescription: generated.meteData?.ogDescription ?? null,
+    metaData: {
+      metaTitle: generated.metaData?.metaTitle ?? null,
+      metaDescription: generated.metaData?.metaDescription ?? null,
+      canonicalUrl: generated.metaData?.canonicalUrl ?? null,
+      ogTitle: generated.metaData?.ogTitle ?? null,
+      ogDescription: generated.metaData?.ogDescription ?? null,
       scriptApplicationJson: mergeKeywordsIntoSchema(
-        generated.meteData?.scriptApplicationJson ?? null,
+        generated.metaData?.scriptApplicationJson ?? null,
         keywords,
         suggestedCategory
       ),
@@ -102,65 +108,46 @@ function buildBlogData(generated: GeneratedBlogPayload): Record<string, unknown>
   };
 }
 
-async function resolveAuthorDocumentId(
+async function resolveAuthorOrThrow(
   strapi: Core.Strapi,
   slug: string
 ): Promise<string> {
-  const authors = await strapi.documents('api::blog-author.blog-author').findMany({
-    filters: { slug: { $eq: slug } },
-    limit: 1,
-  });
-
-  const author = Array.isArray(authors) ? authors[0] : null;
-  if (!author?.documentId) {
+  try {
+    return await resolveAuthorDocumentId(strapi, slug);
+  } catch {
     throw new BlogCreateFromGeneratedError(
       `Author with slug "${slug}" not found`,
       'AUTHOR_NOT_FOUND'
     );
   }
-  return author.documentId;
 }
 
-async function resolveBreadcrumbDocumentId(
+async function resolveBreadcrumbOrThrow(
   strapi: Core.Strapi,
   name: string
 ): Promise<string> {
-  const breadcrumbs = await strapi
-    .documents('api::breadcrumb-initial.breadcrumb-initial')
-    .findMany({
-      filters: { name: { $eq: name } },
-      limit: 1,
-    });
-
-  const breadcrumb = Array.isArray(breadcrumbs) ? breadcrumbs[0] : null;
-  if (!breadcrumb?.documentId) {
+  try {
+    return await resolveBreadcrumbDocumentId(strapi, name);
+  } catch {
     throw new BlogCreateFromGeneratedError(
       `Breadcrumb with name "${name}" not found`,
       'BREADCRUMB_NOT_FOUND'
     );
   }
-  return breadcrumb.documentId;
 }
 
-async function resolveCategoryDocumentId(
+async function resolveCategoryOrThrow(
   strapi: Core.Strapi,
   categoryName: string
 ): Promise<string> {
-  const categories = await strapi
-    .documents('api::blog-category.blog-category')
-    .findMany({
-      filters: { categoryName: { $eq: categoryName } },
-      limit: 1,
-    });
-
-  const category = Array.isArray(categories) ? categories[0] : null;
-  if (!category?.documentId) {
+  try {
+    return await resolveCategoryDocumentId(strapi, categoryName);
+  } catch {
     throw new BlogCreateFromGeneratedError(
       `Category with name "${categoryName}" not found`,
       'CATEGORY_NOT_FOUND'
     );
   }
-  return category.documentId;
 }
 
 export async function createBlogFromGenerated(
@@ -172,7 +159,7 @@ export async function createBlogFromGenerated(
   const enhanced = isEnhancedPayload(generated) ? generated : null;
 
   if (options.blogAuthorSlug) {
-    const authorDocumentId = await resolveAuthorDocumentId(
+    const authorDocumentId = await resolveAuthorOrThrow(
       strapi,
       options.blogAuthorSlug
     );
@@ -180,17 +167,20 @@ export async function createBlogFromGenerated(
   }
 
   if (options.breadcrumbName) {
-    const breadcrumbDocumentId = await resolveBreadcrumbDocumentId(
+    const breadcrumbDocumentId = await resolveBreadcrumbOrThrow(
       strapi,
       options.breadcrumbName
     );
     data.breadcrumb = { documentId: breadcrumbDocumentId };
   }
 
-  if (enhanced?.suggestedCategory) {
-    const categoryDocumentId = await resolveCategoryDocumentId(
+  const categoryToLink =
+    options.categoryName?.trim() || enhanced?.suggestedCategory?.trim();
+
+  if (categoryToLink) {
+    const categoryDocumentId = await resolveCategoryOrThrow(
       strapi,
-      enhanced.suggestedCategory
+      categoryToLink
     );
     data.blog_category = { documentId: categoryDocumentId };
   }
