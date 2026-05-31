@@ -1,5 +1,5 @@
 /**
- * Enhanced blog generation prompts and curated India trending topics.
+ * Enhanced blog generation prompts and trending topic types.
  */
 
 export interface IndiaTrendingTopic {
@@ -9,57 +9,6 @@ export interface IndiaTrendingTopic {
   whyHot: string;
   suggestedAngles: string[];
 }
-
-export const CURATED_INDIA_TRENDING_TOPICS: IndiaTrendingTopic[] = [
-  {
-    id: 'heatwave-power-2026',
-    title: 'Severe heatwave and power crisis',
-    keyDetails:
-      'Temperatures hit 45–48°C in North and Central India, record power demand, widespread outages and water shortages.',
-    whyHot: 'Immediate national crisis affecting daily life, economy, and public health.',
-    suggestedAngles: [
-      'Impact on informal workers in urban areas',
-      'Failing urban infrastructure and grid capacity',
-      'Public health risks and heatstroke prevention',
-    ],
-  },
-  {
-    id: 'cockroach-janta-party',
-    title: 'The Cockroach Janta Party movement',
-    keyDetails:
-      'Satirical online movement with 22M+ Instagram followers; debates on free speech and youth political dissent.',
-    whyHot: 'Unique digital-age expression of frustration among India\'s youth on unemployment and governance.',
-    suggestedAngles: [
-      'Gen Z satire as political commentary',
-      'Free speech vs platform moderation in India',
-      'Youth unemployment and economic anxiety',
-    ],
-  },
-  {
-    id: 'ipl-2026-playoffs',
-    title: 'IPL 2026 playoffs fever',
-    keyDetails:
-      'IPL at peak; Royal Challengers Bengaluru in the final; Vaibhav Sooryavanshi breakout sensation.',
-    whyHot: 'India\'s biggest sporting event dominates entertainment and social media.',
-    suggestedAngles: [
-      'Vaibhav Sooryavanshi and the next generation of stars',
-      'RCB\'s road to the final — fan culture and narrative',
-      'What IPL 2026 means for Indian cricket economics',
-    ],
-  },
-  {
-    id: 'stray-dog-debate',
-    title: 'Stray dog menace and public safety debate',
-    keyDetails:
-      'Hyderabad airport dog video reignited debate; ~52 million stray dogs nationally; Supreme Court involvement.',
-    whyHot: 'Persistent public safety vs animal rights dilemma involving municipalities and courts.',
-    suggestedAngles: [
-      'Municipal policy and sterilization programmes',
-      'Legal mandates and Supreme Court stance explained',
-      'Community safety vs humane animal management',
-    ],
-  },
-];
 
 export const ENHANCED_SYSTEM_PROMPT = `You are a senior Indian news editor and an elite SEO strategist specializing in human-centric search intent.
 Write high-quality, long-form blog posts for an Indian audience and return them as structured JSON only.
@@ -81,12 +30,9 @@ export interface EnhancedPromptInput {
   angle?: string;
   researchContext?: string;
   trendingTopicId?: string;
+  trendingTopic?: IndiaTrendingTopic;
   allowedCategories: string[];
   categoryName?: string;
-}
-
-export function findTrendingTopicById(id: string): IndiaTrendingTopic | undefined {
-  return CURATED_INDIA_TRENDING_TOPICS.find((t) => t.id === id);
 }
 
 export function buildEnhancedUserPrompt(input: EnhancedPromptInput): string {
@@ -94,7 +40,7 @@ export function buildEnhancedUserPrompt(input: EnhancedPromptInput): string {
     topic,
     angle,
     researchContext,
-    trendingTopicId,
+    trendingTopic,
     allowedCategories,
     categoryName,
   } = input;
@@ -106,16 +52,13 @@ export function buildEnhancedUserPrompt(input: EnhancedPromptInput): string {
   const suggestedCategoryExample = categoryName ?? allowedCategories[0] ?? 'Category';
 
   let trendingBlock = '';
-  if (trendingTopicId) {
-    const trending = findTrendingTopicById(trendingTopicId);
-    if (trending) {
-      trendingBlock = `
+  if (trendingTopic) {
+    trendingBlock = `
 Curated trending context (use for grounding, do not copy verbatim):
-- Title: ${trending.title}
-- Key details: ${trending.keyDetails}
-- Why it matters: ${trending.whyHot}
+- Title: ${trendingTopic.title}
+- Key details: ${trendingTopic.keyDetails}
+- Why it matters: ${trendingTopic.whyHot}
 `;
-    }
   }
 
   const angleBlock = angle ? `\nEditorial angle: "${angle}"` : '';

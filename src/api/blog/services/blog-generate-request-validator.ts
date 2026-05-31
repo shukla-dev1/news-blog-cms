@@ -1,8 +1,9 @@
 import type { Core } from '@strapi/strapi';
+import type { IndiaTrendingTopic } from '../prompts/blog-generate-enhanced-prompts';
 import {
-  CURATED_INDIA_TRENDING_TOPICS,
-  findTrendingTopicById,
-} from '../prompts/blog-generate-enhanced-prompts';
+  findByTopicId,
+  listActiveTopicIds,
+} from '../../blog-trending-topic/services/blog-trending-topic';
 import {
   findAuthorBySlug,
   findBreadcrumbByName,
@@ -46,6 +47,7 @@ export interface ValidatedGenerateEnhancedRequest extends ValidatedGenerateReque
   angle?: string;
   researchContext?: string;
   trendingTopicId?: string;
+  trendingTopic?: IndiaTrendingTopic;
   publish: boolean;
   categoryName?: string;
   allowedCategories: string[];
@@ -137,6 +139,7 @@ export async function validateGenerateEnhancedRequest(
 
   const trendingTopicIdRaw = body.trendingTopicId;
   let trendingTopicId: string | undefined;
+  let trendingTopic: IndiaTrendingTopic | undefined;
   if (
     trendingTopicIdRaw !== undefined &&
     trendingTopicIdRaw !== null &&
@@ -150,13 +153,16 @@ export async function validateGenerateEnhancedRequest(
       );
     }
     trendingTopicId = trendingTopicIdRaw.trim();
-    if (!findTrendingTopicById(trendingTopicId)) {
+    trendingTopic =
+      (await findByTopicId(strapi, trendingTopicId)) ?? undefined;
+    if (!trendingTopic) {
+      const allowedIds = await listActiveTopicIds(strapi);
       throw new BlogGenerateValidationError(
         `Trending topic id "${trendingTopicId}" not found`,
         'TRENDING_TOPIC_NOT_FOUND',
         {
           field: 'trendingTopicId',
-          allowedValues: CURATED_INDIA_TRENDING_TOPICS.map((t) => t.id),
+          allowedValues: allowedIds,
         }
       );
     }
@@ -193,6 +199,7 @@ export async function validateGenerateEnhancedRequest(
     angle,
     researchContext,
     trendingTopicId,
+    trendingTopic,
     publish,
     categoryName,
     allowedCategories,

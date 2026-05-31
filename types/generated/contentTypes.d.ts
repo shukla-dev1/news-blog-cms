@@ -498,6 +498,88 @@ export interface ApiBlogCategoryBlogCategory
   };
 }
 
+export interface ApiBlogCronJobBlogCronJob extends Struct.CollectionTypeSchema {
+  collectionName: 'blog_cron_jobs';
+  info: {
+    displayName: 'Blog Cron Job';
+    pluralName: 'blog-cron-jobs';
+    singularName: 'blog-cron-job';
+  };
+  options: {
+    draftAndPublish: false;
+  };
+  attributes: {
+    blogAuthorSlug: Schema.Attribute.String;
+    breadcrumbName: Schema.Attribute.String;
+    categoryName: Schema.Attribute.String;
+    createdAt: Schema.Attribute.DateTime;
+    createdBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
+      Schema.Attribute.Private;
+    cronRule: Schema.Attribute.String;
+    delayHours: Schema.Attribute.Integer & Schema.Attribute.DefaultTo<0>;
+    enabled: Schema.Attribute.Boolean & Schema.Attribute.DefaultTo<false>;
+    jobKey: Schema.Attribute.Enumeration<
+      ['publish_scheduled', 'generate_basic', 'generate_enhanced']
+    > &
+      Schema.Attribute.Required &
+      Schema.Attribute.Unique;
+    label: Schema.Attribute.String;
+    locale: Schema.Attribute.String & Schema.Attribute.Private;
+    localizations: Schema.Attribute.Relation<
+      'oneToMany',
+      'api::blog-cron-job.blog-cron-job'
+    > &
+      Schema.Attribute.Private;
+    minIntervalHours: Schema.Attribute.Integer & Schema.Attribute.DefaultTo<72>;
+    publishedAt: Schema.Attribute.DateTime;
+    publishImmediately: Schema.Attribute.Boolean &
+      Schema.Attribute.DefaultTo<false>;
+    timezone: Schema.Attribute.String;
+    topic: Schema.Attribute.String;
+    updatedAt: Schema.Attribute.DateTime;
+    updatedBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
+      Schema.Attribute.Private;
+  };
+}
+
+export interface ApiBlogTrendingTopicBlogTrendingTopic
+  extends Struct.CollectionTypeSchema {
+  collectionName: 'blog_trending_topics';
+  info: {
+    displayName: 'Blog Trending Topic';
+    pluralName: 'blog-trending-topics';
+    singularName: 'blog-trending-topic';
+  };
+  options: {
+    draftAndPublish: true;
+  };
+  attributes: {
+    createdAt: Schema.Attribute.DateTime;
+    createdBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
+      Schema.Attribute.Private;
+    isActive: Schema.Attribute.Boolean & Schema.Attribute.DefaultTo<true>;
+    keyDetails: Schema.Attribute.Text & Schema.Attribute.Required;
+    locale: Schema.Attribute.String & Schema.Attribute.Private;
+    localizations: Schema.Attribute.Relation<
+      'oneToMany',
+      'api::blog-trending-topic.blog-trending-topic'
+    > &
+      Schema.Attribute.Private;
+    publishedAt: Schema.Attribute.DateTime;
+    region: Schema.Attribute.String & Schema.Attribute.DefaultTo<'IN'>;
+    sortOrder: Schema.Attribute.Integer & Schema.Attribute.DefaultTo<0>;
+    suggestedAngles: Schema.Attribute.Component<'blog.suggested-angle', true>;
+    title: Schema.Attribute.String & Schema.Attribute.Required;
+    topicId: Schema.Attribute.String &
+      Schema.Attribute.Required &
+      Schema.Attribute.Unique;
+    updatedAt: Schema.Attribute.DateTime;
+    updatedBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
+      Schema.Attribute.Private;
+    whyHot: Schema.Attribute.Text & Schema.Attribute.Required;
+  };
+}
+
 export interface ApiBlogBlog extends Struct.CollectionTypeSchema {
   collectionName: 'blogs';
   info: {
@@ -1198,6 +1280,8 @@ declare module '@strapi/strapi' {
       'admin::user': AdminUser;
       'api::blog-author.blog-author': ApiBlogAuthorBlogAuthor;
       'api::blog-category.blog-category': ApiBlogCategoryBlogCategory;
+      'api::blog-cron-job.blog-cron-job': ApiBlogCronJobBlogCronJob;
+      'api::blog-trending-topic.blog-trending-topic': ApiBlogTrendingTopicBlogTrendingTopic;
       'api::blog.blog': ApiBlogBlog;
       'api::breadcrumb-initial.breadcrumb-initial': ApiBreadcrumbInitialBreadcrumbInitial;
       'api::order-item.order-item': ApiOrderItemOrderItem;

@@ -1,20 +1,14 @@
-// import type { Core } from '@strapi/strapi';
+import type { Core } from '@strapi/strapi';
+import { seedBlogTrendingTopicsAndCronJobs } from './api/blog/services/blog-bootstrap-seed';
 
 export default {
-  /**
-   * An asynchronous register function that runs before
-   * your application is initialized.
-   *
-   * This gives you an opportunity to extend code.
-   */
   register(/* { strapi }: { strapi: Core.Strapi } */) {},
 
-  /**
-   * An asynchronous bootstrap function that runs before
-   * your application gets started.
-   *
-   * This gives you an opportunity to set up your data model,
-   * run jobs, or perform some special logic.
-   */
-  bootstrap(/* { strapi }: { strapi: Core.Strapi } */) {},
+  async bootstrap({ strapi }: { strapi: Core.Strapi }) {
+    try {
+      await seedBlogTrendingTopicsAndCronJobs(strapi);
+    } catch (err) {
+      strapi.log.error('[bootstrap] Failed to seed blog trending/cron data:', err);
+    }
+  },
 };

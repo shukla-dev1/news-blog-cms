@@ -1,0 +1,49 @@
+{
+  "kind": "collectionType",
+  "collectionName": "blog_trending_topics",
+  "info": {
+    "singularName": "blog-trending-topic",
+    "pluralName": "blog-trending-topics",
+    "displayName": "Blog Trending Topic"
+  },
+  "options": {
+    "draftAndPublish": true
+  },
+  "pluginOptions": {},
+  "attributes": {
+    "topicId": {
+      "type": "string",
+      "required": true,
+      "unique": true
+    },
+    "title": {
+      "type": "string",
+      "required": true
+    },
+    "keyDetails": {
+      "type": "text",
+      "required": true
+    },
+    "whyHot": {
+      "type": "text",
+      "required": true
+    },
+    "suggestedAngles": {
+      "type": "component",
+      "repeatable": true,
+      "component": "blog.suggested-angle"
+    },
+    "isActive": {
+      "type": "boolean",
+      "default": true
+    },
+    "region": {
+      "type": "string",
+      "default": "IN"
+    },
+    "sortOrder": {
+      "type": "integer",
+      "default": 0
+    }
+  }
+}

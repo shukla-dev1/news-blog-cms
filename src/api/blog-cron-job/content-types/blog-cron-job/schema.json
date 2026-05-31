@@ -1,0 +1,58 @@
+{
+  "kind": "collectionType",
+  "collectionName": "blog_cron_jobs",
+  "info": {
+    "singularName": "blog-cron-job",
+    "pluralName": "blog-cron-jobs",
+    "displayName": "Blog Cron Job"
+  },
+  "options": {
+    "draftAndPublish": false
+  },
+  "pluginOptions": {},
+  "attributes": {
+    "jobKey": {
+      "type": "enumeration",
+      "enum": ["publish_scheduled", "generate_basic", "generate_enhanced"],
+      "required": true,
+      "unique": true
+    },
+    "label": {
+      "type": "string"
+    },
+    "enabled": {
+      "type": "boolean",
+      "default": false
+    },
+    "cronRule": {
+      "type": "string"
+    },
+    "timezone": {
+      "type": "string"
+    },
+    "topic": {
+      "type": "string"
+    },
+    "publishImmediately": {
+      "type": "boolean",
+      "default": false
+    },
+    "delayHours": {
+      "type": "integer",
+      "default": 0
+    },
+    "minIntervalHours": {
+      "type": "integer",
+      "default": 72
+    },
+    "blogAuthorSlug": {
+      "type": "string"
+    },
+    "breadcrumbName": {
+      "type": "string"
+    },
+    "categoryName": {
+      "type": "string"
+    }
+  }
+}

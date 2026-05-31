@@ -1,5 +1,16 @@
 import type { Schema, Struct } from '@strapi/strapi';
 
+export interface BlogSuggestedAngle extends Struct.ComponentSchema {
+  collectionName: 'components_blog_suggested_angles';
+  info: {
+    description: 'Editorial angle for a trending blog topic';
+    displayName: 'Suggested Angle';
+  };
+  attributes: {
+    angle: Schema.Attribute.Text & Schema.Attribute.Required;
+  };
+}
+
 export interface MetaSeo extends Struct.ComponentSchema {
   collectionName: 'components_meta_seos';
   info: {
@@ -48,6 +59,7 @@ export interface SharedBreadcrumbItems extends Struct.ComponentSchema {
 declare module '@strapi/strapi' {
   export module Public {
     export interface ComponentSchemas {
+      'blog.suggested-angle': BlogSuggestedAngle;
       'meta.seo': MetaSeo;
       'shared.all-social-links': SharedAllSocialLinks;
       'shared.breadcrumb-items': SharedBreadcrumbItems;

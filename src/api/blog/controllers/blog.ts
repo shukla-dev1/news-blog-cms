@@ -5,7 +5,7 @@
 import { factories } from '@strapi/strapi';
 import * as XLSX from 'xlsx';
 import { parsePaginationFromQuery } from '../../../utils/pagination';
-import { CURATED_INDIA_TRENDING_TOPICS } from '../prompts/blog-generate-enhanced-prompts';
+import { listActiveTopics } from '../../blog-trending-topic/services/blog-trending-topic';
 import {
   createBlogFromGenerated,
 } from '../services/blog-create-from-generated';
@@ -233,21 +233,23 @@ export default factories.createCoreController('api::blog.blog', ({ strapi }) => 
   },
 
   async listTrendingTopics(ctx) {
+    const topics = await listActiveTopics(strapi);
     ctx.body = {
-      data: CURATED_INDIA_TRENDING_TOPICS,
+      data: topics,
       meta: {
         region: 'IN',
         updatedAt: new Date().toISOString(),
-        count: CURATED_INDIA_TRENDING_TOPICS.length,
+        count: topics.length,
       },
     };
   },
 
   async listGenerateOptions(ctx) {
-    const [categories, authors, breadcrumbs] = await Promise.all([
+    const [categories, authors, breadcrumbs, trendingTopics] = await Promise.all([
       listCategoryNames(strapi),
       listAuthorsForGenerateOptions(strapi),
       listBreadcrumbNames(strapi),
+      listActiveTopics(strapi),
     ]);
 
     ctx.body = {
@@ -255,7 +257,7 @@ export default factories.createCoreController('api::blog.blog', ({ strapi }) => 
         categories,
         authors,
         breadcrumbs,
-        trendingTopics: CURATED_INDIA_TRENDING_TOPICS,
+        trendingTopics,
       },
       meta: {
         updatedAt: new Date().toISOString(),
@@ -292,6 +294,7 @@ export default factories.createCoreController('api::blog.blog', ({ strapi }) => 
           angle: validated.angle,
           researchContext: validated.researchContext,
           trendingTopicId: validated.trendingTopicId,
+          trendingTopic: validated.trendingTopic,
           allowedCategories: validated.allowedCategories,
           categoryName: validated.categoryName,
         });
