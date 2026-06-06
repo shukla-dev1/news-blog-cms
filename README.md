@@ -1,5 +1,22 @@
 # Blog CMS
 
+## Postman collection (recommended)
+
+Import these files in Postman (**Import** → drag files or select folder):
+
+| File | Purpose |
+|------|---------|
+| [`postman/Blog-CMS-AI-Flow.postman_collection.json`](postman/Blog-CMS-AI-Flow.postman_collection.json) | Ordered flow: setup → validation → AI generate |
+| [`postman/Blog-CMS-Local.postman_environment.json`](postman/Blog-CMS-Local.postman_environment.json) | `base_url` and placeholders for category/trending/author |
+
+1. Select environment **Blog CMS — Local**.
+2. Run folder **1 — Setup** top to bottom (Step 1 auto-fills `categoryName` / `trendingTopicId` via Tests).
+3. Run folder **2 — AI generate** (allow 20–90s per request).
+
+You can delete or archive old collections (e.g. Experiment1/ReadVox) and use **Blog CMS — AI API Flow** only.
+
+---
+
 ## Step-by-step: Test AI APIs
 
 Follow these steps in order. Steps 1–4 do not call DeepSeek; steps 5–6 do.
