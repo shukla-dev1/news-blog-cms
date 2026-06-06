@@ -5,16 +5,30 @@
 import { factories } from '@strapi/strapi';
 import * as XLSX from 'xlsx';
 import { parsePaginationFromQuery } from '../../../utils/pagination';
-import { CURATED_INDIA_TRENDING_TOPICS } from '../prompts/blog-generate-enhanced-prompts';
+import { listActiveTopics } from '../../blog-trending-topic/services/blog-trending-topic';
 import {
   createBlogFromGenerated,
 } from '../services/blog-create-from-generated';
 import type { GeneratedBlogPayload } from '../services/blog-generate';
 import type { GeneratedBlogEnhancedPayload } from '../services/blog-generate-enhanced';
 import {
+  validateGenerateEnhancedRequest,
+  validateGenerateRequest,
+  assertAiSuggestedCategoryAllowed,
+} from '../services/blog-generate-request-validator';
+import {
+  listAuthorsForGenerateOptions,
+  listBreadcrumbNames,
+  listCategoryNames,
+} from '../services/blog-relation-resolvers';
+import {
   formatDeepSeekErrorResponse,
   mapCreateBlogError,
 } from '../utils/deepseek-errors';
+import {
+  formatValidationErrorResponse,
+  isBlogGenerateValidationError,
+} from '../utils/validation-errors';
 
 type BulkRow = {
   id?: number;
@@ -90,7 +104,7 @@ export default factories.createCoreController('api::blog.blog', ({ strapi }) => 
           row.ogTitle ||
           row.ogDescription
         ) {
-          data.meteData = {
+          data.metaData = {
             metaTitle: row.metaTitle ?? null,
             metaDescription: row.metaDescription ?? null,
             canonicalUrl: row.canonicalUrl ?? null,
@@ -156,14 +170,24 @@ export default factories.createCoreController('api::blog.blog', ({ strapi }) => 
   },
 
   async generate(ctx) {
-    const { topic, blogAuthorSlug, breadcrumbName } = ctx.request.body as any;
+    const body = (ctx.request.body ?? {}) as Record<string, unknown>;
 
-    strapi.log.info(`[generate] Request received — topic: "${topic}", blogAuthorSlug: "${blogAuthorSlug ?? ''}", breadcrumbName: "${breadcrumbName ?? ''}"`);
-
-    if (!topic || typeof topic !== 'string') {
-      strapi.log.warn('[generate] Rejected: "topic" is missing or not a string');
-      return ctx.badRequest('"topic" is required');
+    let validated;
+    try {
+      validated = await validateGenerateRequest(strapi, body);
+    } catch (err: unknown) {
+      if (isBlogGenerateValidationError(err)) {
+        ctx.status = 400;
+        ctx.body = { data: null, error: formatValidationErrorResponse(err) };
+        return;
+      }
+      throw err;
     }
+
+    const { topic, blogAuthorSlug, breadcrumbName } = validated;
+    strapi.log.info(
+      `[generate] Request validated — topic: "${topic}", blogAuthorSlug: "${blogAuthorSlug ?? ''}", breadcrumbName: "${breadcrumbName ?? ''}"`
+    );
 
     let generated: GeneratedBlogPayload;
     try {
@@ -184,10 +208,8 @@ export default factories.createCoreController('api::blog.blog', ({ strapi }) => 
     try {
       strapi.log.info('[generate] Saving blog entry to database');
       const entry = await createBlogFromGenerated(strapi, generated, {
-        blogAuthorSlug:
-          typeof blogAuthorSlug === 'string' ? blogAuthorSlug : undefined,
-        breadcrumbName:
-          typeof breadcrumbName === 'string' ? breadcrumbName : undefined,
+        blogAuthorSlug,
+        breadcrumbName,
         status: 'draft',
       });
       strapi.log.info(
@@ -211,68 +233,102 @@ export default factories.createCoreController('api::blog.blog', ({ strapi }) => 
   },
 
   async listTrendingTopics(ctx) {
+    const topics = await listActiveTopics(strapi);
     ctx.body = {
-      data: CURATED_INDIA_TRENDING_TOPICS,
+      data: topics,
       meta: {
         region: 'IN',
         updatedAt: new Date().toISOString(),
-        count: CURATED_INDIA_TRENDING_TOPICS.length,
+        count: topics.length,
+      },
+    };
+  },
+
+  async listGenerateOptions(ctx) {
+    const [categories, authors, breadcrumbs, trendingTopics] = await Promise.all([
+      listCategoryNames(strapi),
+      listAuthorsForGenerateOptions(strapi),
+      listBreadcrumbNames(strapi),
+      listActiveTopics(strapi),
+    ]);
+
+    ctx.body = {
+      data: {
+        categories,
+        authors,
+        breadcrumbs,
+        trendingTopics,
+      },
+      meta: {
+        updatedAt: new Date().toISOString(),
       },
     };
   },
 
   async generateEnhanced(ctx) {
-    const {
-      topic,
-      angle,
-      researchContext,
-      trendingTopicId,
-      blogAuthorSlug,
-      breadcrumbName,
-      publish,
-    } = ctx.request.body as Record<string, unknown>;
+    const body = (ctx.request.body ?? {}) as Record<string, unknown>;
+
+    let validated;
+    try {
+      validated = await validateGenerateEnhancedRequest(strapi, body);
+    } catch (err: unknown) {
+      if (isBlogGenerateValidationError(err)) {
+        strapi.log.warn(`[generate-enhanced] Validation failed: ${err.message}`);
+        ctx.status = 400;
+        ctx.body = { data: null, error: formatValidationErrorResponse(err) };
+        return;
+      }
+      throw err;
+    }
 
     strapi.log.info(
-      `[generate-enhanced] topic="${topic ?? ''}" trendingTopicId="${trendingTopicId ?? ''}" angle="${angle ?? ''}"`
+      `[generate-enhanced] Validated — topic="${validated.topic}" trendingTopicId="${validated.trendingTopicId ?? ''}" categoryName="${validated.categoryName ?? ''}"`
     );
-
-    if (!topic || typeof topic !== 'string') {
-      return ctx.badRequest('"topic" is required');
-    }
 
     let generated: GeneratedBlogEnhancedPayload;
     try {
       generated = await strapi
         .service('api::blog.blog-generate-enhanced')
         .generateEnhanced({
-          topic,
-          angle: typeof angle === 'string' ? angle : undefined,
-          researchContext:
-            typeof researchContext === 'string' ? researchContext : undefined,
-          trendingTopicId:
-            typeof trendingTopicId === 'string' ? trendingTopicId : undefined,
+          topic: validated.topic,
+          angle: validated.angle,
+          researchContext: validated.researchContext,
+          trendingTopicId: validated.trendingTopicId,
+          trendingTopic: validated.trendingTopic,
+          allowedCategories: validated.allowedCategories,
+          categoryName: validated.categoryName,
         });
       strapi.log.info(
         `[generate-enhanced] DeepSeek responded — title: "${generated.title}"`
       );
     } catch (err: unknown) {
-      strapi.log.error('[generate-enhanced] DeepSeek API call failed:', err);
-      const { status, body } = formatDeepSeekErrorResponse(err);
-      if (status === 402) {
-        ctx.status = 402;
-        ctx.body = { error: body };
+      if (isBlogGenerateValidationError(err)) {
+        ctx.status = 400;
+        ctx.body = { data: null, error: formatValidationErrorResponse(err) };
         return;
       }
-      return ctx.internalServerError(body);
+      strapi.log.error('[generate-enhanced] DeepSeek API call failed:', err);
+      const { status, body: errorBody } = formatDeepSeekErrorResponse(err);
+      if (status === 402) {
+        ctx.status = 402;
+        ctx.body = { error: errorBody };
+        return;
+      }
+      return ctx.internalServerError(errorBody);
     }
 
     try {
+      assertAiSuggestedCategoryAllowed(
+        generated.suggestedCategory,
+        validated.allowedCategories,
+        validated.categoryName
+      );
+
       const entry = await createBlogFromGenerated(strapi, generated, {
-        blogAuthorSlug:
-          typeof blogAuthorSlug === 'string' ? blogAuthorSlug : undefined,
-        breadcrumbName:
-          typeof breadcrumbName === 'string' ? breadcrumbName : undefined,
-        status: publish === true ? 'published' : 'draft',
+        blogAuthorSlug: validated.blogAuthorSlug,
+        breadcrumbName: validated.breadcrumbName,
+        categoryName: validated.categoryName,
+        status: validated.publish ? 'published' : 'draft',
       });
 
       ctx.body = {
@@ -285,8 +341,14 @@ export default factories.createCoreController('api::blog.blog', ({ strapi }) => 
         suggestedCategory: generated.suggestedCategory ?? null,
       };
     } catch (err: unknown) {
+      if (isBlogGenerateValidationError(err)) {
+        ctx.status = 400;
+        ctx.body = { data: null, error: formatValidationErrorResponse(err) };
+        return;
+      }
       const mapped = mapCreateBlogError(err);
       if (mapped.badRequest) {
+        strapi.log.warn(`[generate-enhanced] Save rejected: ${mapped.message}`);
         return ctx.badRequest(mapped.message);
       }
       strapi.log.error('[generate-enhanced] Failed to save blog:', err);

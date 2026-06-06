@@ -11,7 +11,7 @@ export const DEFAULT_BLOG_POPULATE = [
   'blog_category',
   'blogAuthor',
   'breadcrumb',
-  'meteData',
+  'metaData',
 ] as const;
 
 export function categoryFilter(categoryName: string) {

@@ -1,0 +1,14 @@
+{
+  "collectionName": "components_blog_suggested_angles",
+  "info": {
+    "displayName": "Suggested Angle",
+    "description": "Editorial angle for a trending blog topic"
+  },
+  "options": {},
+  "attributes": {
+    "angle": {
+      "type": "text",
+      "required": true
+    }
+  }
+}

@@ -1,34 +1,32 @@
 import type { Core } from '@strapi/strapi';
 import { BLOG_UID } from '../../../utils/blog-documents';
-import { CURATED_INDIA_TRENDING_TOPICS } from '../prompts/blog-generate-enhanced-prompts';
+import { pickTopicForRotation } from '../../blog-trending-topic/services/blog-trending-topic';
+import {
+  getJobConfigWithEnvFallback,
+  isCronGloballyEnabled,
+} from '../../blog-cron-job/services/blog-cron-job';
 import {
   BlogCreateFromGeneratedError,
   createBlogFromGenerated,
 } from './blog-create-from-generated';
+import { assertAiSuggestedCategoryAllowed } from './blog-generate-request-validator';
+import { listCategoryNames } from './blog-relation-resolvers';
 import { isInsufficientBalanceError } from './deepseek-client';
 
 let generateInProgress = false;
 let enhancedGenerateInProgress = false;
 
-function envBool(name: string, defaultValue: boolean): boolean {
-  const raw = process.env[name];
-  if (raw === undefined || raw === '') {
-    return defaultValue;
-  }
-  return raw === 'true' || raw === '1';
-}
-
-function envInt(name: string, defaultValue: number): number {
-  const raw = process.env[name];
-  if (raw === undefined || raw === '') {
-    return defaultValue;
-  }
-  const parsed = Number.parseInt(raw, 10);
-  return Number.isNaN(parsed) ? defaultValue : parsed;
-}
-
 export default ({ strapi }: { strapi: Core.Strapi }) => ({
   async publishDueBlogs() {
+    if (!isCronGloballyEnabled()) {
+      return { skipped: true, reason: 'cron_disabled' };
+    }
+
+    const job = await getJobConfigWithEnvFallback(strapi, 'publish_scheduled');
+    if (!job.enabled) {
+      return { skipped: true, reason: 'disabled' };
+    }
+
     const now = new Date().toISOString();
 
     const due = await strapi.documents(BLOG_UID).findMany({
@@ -82,7 +80,12 @@ export default ({ strapi }: { strapi: Core.Strapi }) => ({
   },
 
   async generateAndMaybeSchedule() {
-    if (!envBool('CRON_BLOG_GENERATE_ENABLED', false)) {
+    if (!isCronGloballyEnabled()) {
+      return { skipped: true, reason: 'cron_disabled' };
+    }
+
+    const job = await getJobConfigWithEnvFallback(strapi, 'generate_basic');
+    if (!job.enabled) {
       return { skipped: true, reason: 'disabled' };
     }
 
@@ -91,10 +94,10 @@ export default ({ strapi }: { strapi: Core.Strapi }) => ({
       return { skipped: true, reason: 'in_progress' };
     }
 
-    const topic = process.env.CRON_BLOG_GENERATE_TOPIC?.trim();
+    const topic = job.topic?.trim();
     if (!topic) {
       strapi.log.warn(
-        '[blog-scheduler] CRON_BLOG_GENERATE_ENABLED but CRON_BLOG_GENERATE_TOPIC is missing'
+        '[blog-scheduler] generate_basic enabled but topic is missing in Blog Cron Job'
       );
       return { skipped: true, reason: 'no_topic' };
     }
@@ -106,19 +109,16 @@ export default ({ strapi }: { strapi: Core.Strapi }) => ({
         .service('api::blog.blog-generate')
         .generate(topic);
 
-      const publishImmediately = envBool('CRON_BLOG_GENERATE_PUBLISH', false);
-      const delayHours = envInt('CRON_BLOG_GENERATE_DELAY_HOURS', 0);
-
       let scheduledPublishAt: Date | null = null;
-      if (!publishImmediately && delayHours > 0) {
-        scheduledPublishAt = new Date(Date.now() + delayHours * 60 * 60 * 1000);
+      if (!job.publishImmediately && job.delayHours > 0) {
+        scheduledPublishAt = new Date(Date.now() + job.delayHours * 60 * 60 * 1000);
       }
 
       const entry = await createBlogFromGenerated(strapi, generated, {
-        blogAuthorSlug: process.env.CRON_BLOG_GENERATE_AUTHOR_SLUG?.trim() || undefined,
-        breadcrumbName: process.env.CRON_BLOG_GENERATE_BREADCRUMB?.trim() || undefined,
+        blogAuthorSlug: job.blogAuthorSlug ?? undefined,
+        breadcrumbName: job.breadcrumbName ?? undefined,
         scheduledPublishAt,
-        status: publishImmediately ? 'published' : 'draft',
+        status: job.publishImmediately ? 'published' : 'draft',
       });
 
       strapi.log.info(
@@ -143,7 +143,12 @@ export default ({ strapi }: { strapi: Core.Strapi }) => ({
   },
 
   async generateEnhancedFromTrending() {
-    if (!envBool('CRON_BLOG_ENHANCED_ENABLED', false)) {
+    if (!isCronGloballyEnabled()) {
+      return { skipped: true, reason: 'cron_disabled' };
+    }
+
+    const job = await getJobConfigWithEnvFallback(strapi, 'generate_enhanced');
+    if (!job.enabled) {
       return { skipped: true, reason: 'disabled' };
     }
 
@@ -154,7 +159,7 @@ export default ({ strapi }: { strapi: Core.Strapi }) => ({
       return { skipped: true, reason: 'in_progress' };
     }
 
-    const minIntervalHours = envInt('CRON_BLOG_ENHANCED_MIN_INTERVAL_HOURS', 72);
+    const minIntervalHours = job.minIntervalHours;
     const since = new Date(
       Date.now() - minIntervalHours * 60 * 60 * 1000
     ).toISOString();
@@ -170,15 +175,30 @@ export default ({ strapi }: { strapi: Core.Strapi }) => ({
       return { skipped: true, reason: 'recent_blog_exists' };
     }
 
-    const weekIndex = Math.floor(Date.now() / (7 * 24 * 60 * 60 * 1000));
-    const trending =
-      CURATED_INDIA_TRENDING_TOPICS[
-        weekIndex % CURATED_INDIA_TRENDING_TOPICS.length
-      ];
+    const trending = await pickTopicForRotation(strapi);
+    if (!trending) {
+      strapi.log.warn(
+        '[blog-scheduler] Enhanced generate skipped — no active trending topics'
+      );
+      return { skipped: true, reason: 'no_trending_topics' };
+    }
+
     const angle =
-      trending.suggestedAngles[
-        Math.floor(Math.random() * trending.suggestedAngles.length)
-      ];
+      trending.suggestedAngles.length > 0
+        ? trending.suggestedAngles[
+            Math.floor(Math.random() * trending.suggestedAngles.length)
+          ]
+        : undefined;
+
+    const allowedCategories = await listCategoryNames(strapi);
+    if (allowedCategories.length === 0) {
+      strapi.log.warn(
+        '[blog-scheduler] Enhanced generate skipped — no blog categories in Strapi'
+      );
+      return { skipped: true, reason: 'no_categories' };
+    }
+
+    const cronCategoryName = job.categoryName ?? undefined;
 
     enhancedGenerateInProgress = true;
 
@@ -189,28 +209,33 @@ export default ({ strapi }: { strapi: Core.Strapi }) => ({
           topic: trending.title,
           angle,
           trendingTopicId: trending.id,
+          trendingTopic: trending,
           researchContext: `${trending.keyDetails} ${trending.whyHot}`,
+          allowedCategories,
+          categoryName: cronCategoryName,
         });
 
-      const publishImmediately = envBool('CRON_BLOG_ENHANCED_PUBLISH', false);
-      const delayHours = envInt('CRON_BLOG_ENHANCED_DELAY_HOURS', 24);
+      assertAiSuggestedCategoryAllowed(
+        generated.suggestedCategory,
+        allowedCategories,
+        cronCategoryName
+      );
 
       let scheduledPublishAt: Date | null = null;
-      if (!publishImmediately && delayHours > 0) {
-        scheduledPublishAt = new Date(Date.now() + delayHours * 60 * 60 * 1000);
+      if (!job.publishImmediately && job.delayHours > 0) {
+        scheduledPublishAt = new Date(Date.now() + job.delayHours * 60 * 60 * 1000);
       }
 
       const entry = await createBlogFromGenerated(strapi, generated, {
-        blogAuthorSlug:
-          process.env.CRON_BLOG_ENHANCED_AUTHOR_SLUG?.trim() || undefined,
-        breadcrumbName:
-          process.env.CRON_BLOG_ENHANCED_BREADCRUMB?.trim() || undefined,
+        blogAuthorSlug: job.blogAuthorSlug ?? undefined,
+        breadcrumbName: job.breadcrumbName ?? undefined,
+        categoryName: cronCategoryName,
         scheduledPublishAt,
-        status: publishImmediately ? 'published' : 'draft',
+        status: job.publishImmediately ? 'published' : 'draft',
       });
 
       strapi.log.info(
-        `[blog-scheduler] Enhanced blog documentId=${entry.documentId} topic="${trending.id}" angle="${angle}"`
+        `[blog-scheduler] Enhanced blog documentId=${entry.documentId} topic="${trending.id}" angle="${angle ?? ''}"`
       );
 
       return {

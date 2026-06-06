@@ -24,7 +24,7 @@
     "content": {
       "type": "richtext"
     },
-    "meteData": {
+    "metaData": {
       "type": "component",
       "component": "meta.seo",
       "repeatable": false

@@ -13,7 +13,8 @@
     "strapi": "strapi",
     "upgrade": "npx @strapi/upgrade latest",
     "upgrade:dry": "npx @strapi/upgrade latest --dry",
-    "transfer:from": "strapi transfer --from https://growing-passion-561d93918e.strapiapp.com/admin"
+    "transfer:from": "strapi transfer --from https://growing-passion-561d93918e.strapiapp.com/admin",
+    "typecheck": "tsc --noEmit"
   },
   "dependencies": {
     "@strapi-community/cloudinary-media-library": "^1.0.3",
