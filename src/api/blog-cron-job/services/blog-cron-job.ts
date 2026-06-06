@@ -4,7 +4,8 @@ import type { Core } from '@strapi/strapi';
 export type BlogCronJobKey =
   | 'publish_scheduled'
   | 'generate_basic'
-  | 'generate_enhanced';
+  | 'generate_enhanced'
+  | 'generate_quick';
 
 const CRON_JOB_UID = 'api::blog-cron-job.blog-cron-job';
 
@@ -40,12 +41,14 @@ const ENV_CRON_RULE: Record<BlogCronJobKey, string> = {
   publish_scheduled: 'CRON_PUBLISH_RULE',
   generate_basic: 'CRON_BLOG_GENERATE_RULE',
   generate_enhanced: 'CRON_BLOG_ENHANCED_RULE',
+  generate_quick: '',
 };
 
 const ENV_ENABLED: Record<BlogCronJobKey, string> = {
   publish_scheduled: '',
   generate_basic: 'CRON_BLOG_GENERATE_ENABLED',
   generate_enhanced: 'CRON_BLOG_ENHANCED_ENABLED',
+  generate_quick: '',
 };
 
 function envBool(name: string, defaultValue: boolean): boolean {
@@ -100,7 +103,8 @@ export async function getJobConfig(
   strapi: Core.Strapi,
   jobKey: BlogCronJobKey
 ): Promise<BlogCronJobConfig | null> {
-  const rows = await strapi.documents(CRON_JOB_UID).findMany({
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const rows = await (strapi.documents(CRON_JOB_UID) as any).findMany({
     filters: { jobKey: { $eq: jobKey } },
     limit: 1,
   });
@@ -179,6 +183,25 @@ export async function getJobConfigWithEnvFallback(
 
 export function isCronGloballyEnabled(): boolean {
   return envBool('CRON_ENABLED', true);
+}
+
+export async function disableJob(
+  strapi: Core.Strapi,
+  jobKey: BlogCronJobKey
+): Promise<void> {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const docs = strapi.documents(CRON_JOB_UID) as any;
+  const rows = await docs.findMany({
+    filters: { jobKey: { $eq: jobKey } },
+    limit: 1,
+  });
+  const doc = Array.isArray(rows) ? rows[0] : null;
+  if (doc?.documentId) {
+    await docs.update({
+      documentId: doc.documentId,
+      data: { enabled: false },
+    });
+  }
 }
 
 export default factories.createCoreService(CRON_JOB_UID, ({ strapi }) => ({

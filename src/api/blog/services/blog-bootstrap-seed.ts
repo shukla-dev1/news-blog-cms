@@ -32,28 +32,36 @@ export async function seedBlogTrendingTopicsAndCronJobs(
     );
   }
 
-  const cronCount = await strapi.documents(CRON_JOB_UID).count({});
-  if (cronCount === 0) {
-    for (const seed of DEFAULT_CRON_JOB_SEEDS) {
-      await strapi.documents(CRON_JOB_UID).create({
-        data: {
-          jobKey: seed.jobKey,
-          label: seed.label,
-          enabled: seed.enabled,
-          cronRule: seed.cronRule,
-          timezone: seed.timezone,
-          topic: seed.topic ?? null,
-          publishImmediately: seed.publishImmediately ?? false,
-          delayHours: seed.delayHours ?? 0,
-          minIntervalHours: seed.minIntervalHours ?? 72,
-          blogAuthorSlug: seed.blogAuthorSlug ?? null,
-          breadcrumbName: seed.breadcrumbName ?? null,
-          categoryName: seed.categoryName ?? null,
-        },
-      });
+  let seededCronCount = 0;
+  for (const seed of DEFAULT_CRON_JOB_SEEDS) {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const existing = await (strapi.documents(CRON_JOB_UID) as any).findMany({
+      filters: { jobKey: { $eq: seed.jobKey } },
+      limit: 1,
+    });
+    if (Array.isArray(existing) && existing.length > 0) {
+      continue;
     }
-    strapi.log.info(
-      `[bootstrap] Seeded ${DEFAULT_CRON_JOB_SEEDS.length} blog cron jobs`
-    );
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    await (strapi.documents(CRON_JOB_UID) as any).create({
+      data: {
+        jobKey: seed.jobKey,
+        label: seed.label,
+        enabled: seed.enabled,
+        cronRule: seed.cronRule,
+        timezone: seed.timezone,
+        topic: seed.topic ?? null,
+        publishImmediately: seed.publishImmediately ?? false,
+        delayHours: seed.delayHours ?? 0,
+        minIntervalHours: seed.minIntervalHours ?? 72,
+        blogAuthorSlug: seed.blogAuthorSlug ?? null,
+        breadcrumbName: seed.breadcrumbName ?? null,
+        categoryName: seed.categoryName ?? null,
+      },
+    });
+    seededCronCount += 1;
+  }
+  if (seededCronCount > 0) {
+    strapi.log.info(`[bootstrap] Seeded ${seededCronCount} missing blog cron job(s)`);
   }
 }
