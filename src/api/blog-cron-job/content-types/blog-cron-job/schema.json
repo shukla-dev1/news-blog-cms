@@ -13,7 +13,7 @@
   "attributes": {
     "jobKey": {
       "type": "enumeration",
-      "enum": ["publish_scheduled", "generate_basic", "generate_enhanced"],
+      "enum": ["publish_scheduled", "generate_basic", "generate_enhanced", "generate_quick"],
       "required": true,
       "unique": true
     },

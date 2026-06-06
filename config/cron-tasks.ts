@@ -40,6 +40,19 @@ const cronTasks: Core.Config.Server['cron']['tasks'] = {
       ...(process.env.CRON_TZ ? { tz: process.env.CRON_TZ } : {}),
     },
   },
+  generateQuickBlog: {
+    task: async ({ strapi }) => {
+      try {
+        await strapi.service('api::blog.blog-scheduler').generateQuick();
+      } catch {
+        // Logged inside service; avoid crashing the cron runner
+      }
+    },
+    options: {
+      rule: '* * * * *',
+      ...(process.env.CRON_TZ ? { tz: process.env.CRON_TZ } : {}),
+    },
+  },
 };
 
 export default cronTasks;

@@ -109,4 +109,14 @@ export const DEFAULT_CRON_JOB_SEEDS: CronJobSeed[] = [
     delayHours: 24,
     minIntervalHours: 72,
   },
+  {
+    jobKey: 'generate_quick',
+    label: 'Quick on-demand blog generate',
+    enabled: false,
+    cronRule: '* * * * *',
+    timezone: 'Asia/Kolkata',
+    publishImmediately: false,
+    delayHours: 0,
+    minIntervalHours: 0,
+  },
 ];

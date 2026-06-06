@@ -519,7 +519,12 @@ export interface ApiBlogCronJobBlogCronJob extends Struct.CollectionTypeSchema {
     delayHours: Schema.Attribute.Integer & Schema.Attribute.DefaultTo<0>;
     enabled: Schema.Attribute.Boolean & Schema.Attribute.DefaultTo<false>;
     jobKey: Schema.Attribute.Enumeration<
-      ['publish_scheduled', 'generate_basic', 'generate_enhanced']
+      [
+        'publish_scheduled',
+        'generate_basic',
+        'generate_enhanced',
+        'generate_quick',
+      ]
     > &
       Schema.Attribute.Required &
       Schema.Attribute.Unique;

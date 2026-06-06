@@ -4,6 +4,7 @@ import { pickTopicForRotation } from '../../blog-trending-topic/services/blog-tr
 import {
   getJobConfigWithEnvFallback,
   isCronGloballyEnabled,
+  disableJob,
 } from '../../blog-cron-job/services/blog-cron-job';
 import {
   BlogCreateFromGeneratedError,
@@ -15,6 +16,7 @@ import { isInsufficientBalanceError } from './deepseek-client';
 
 let generateInProgress = false;
 let enhancedGenerateInProgress = false;
+let quickGenerateInProgress = false;
 
 export default ({ strapi }: { strapi: Core.Strapi }) => ({
   async publishDueBlogs() {
@@ -26,6 +28,8 @@ export default ({ strapi }: { strapi: Core.Strapi }) => ({
     if (!job.enabled) {
       return { skipped: true, reason: 'disabled' };
     }
+
+    strapi.log.info('[blog-scheduler] publishDueBlogs — fired, checking for due drafts');
 
     const now = new Date().toISOString();
 
@@ -104,6 +108,8 @@ export default ({ strapi }: { strapi: Core.Strapi }) => ({
 
     generateInProgress = true;
 
+    strapi.log.info(`[blog-scheduler] generate_basic — started, topic="${topic}"`);
+
     try {
       const generated = await strapi
         .service('api::blog.blog-generate')
@@ -122,7 +128,7 @@ export default ({ strapi }: { strapi: Core.Strapi }) => ({
       });
 
       strapi.log.info(
-        `[blog-scheduler] Generated blog documentId=${entry.documentId} title="${entry.title ?? ''}"`
+        `[blog-scheduler] Generated blog documentId=${entry.documentId} title="${entry.title ?? ''}" scheduledPublishAt=${scheduledPublishAt?.toISOString() ?? 'immediate'}`
       );
 
       return {
@@ -202,6 +208,10 @@ export default ({ strapi }: { strapi: Core.Strapi }) => ({
 
     enhancedGenerateInProgress = true;
 
+    strapi.log.info(
+      `[blog-scheduler] generate_enhanced — started, topic="${trending.id}" angle="${angle ?? 'none'}"`
+    );
+
     try {
       const generated = await strapi
         .service('api::blog.blog-generate-enhanced')
@@ -235,7 +245,7 @@ export default ({ strapi }: { strapi: Core.Strapi }) => ({
       });
 
       strapi.log.info(
-        `[blog-scheduler] Enhanced blog documentId=${entry.documentId} topic="${trending.id}" angle="${angle ?? ''}"`
+        `[blog-scheduler] Enhanced blog documentId=${entry.documentId} topic="${trending.id}" angle="${angle ?? ''}" scheduledPublishAt=${scheduledPublishAt?.toISOString() ?? 'immediate'}`
       );
 
       return {
@@ -263,6 +273,118 @@ export default ({ strapi }: { strapi: Core.Strapi }) => ({
       throw err;
     } finally {
       enhancedGenerateInProgress = false;
+    }
+  },
+
+  async generateQuick() {
+    if (!isCronGloballyEnabled()) {
+      return { skipped: true, reason: 'cron_disabled' };
+    }
+
+    const job = await getJobConfigWithEnvFallback(strapi, 'generate_quick');
+    if (!job.enabled) {
+      return { skipped: true, reason: 'disabled' };
+    }
+
+    if (quickGenerateInProgress) {
+      strapi.log.warn(
+        '[blog-scheduler] generate_quick skipped — previous run still in progress'
+      );
+      return { skipped: true, reason: 'in_progress' };
+    }
+
+    const trending = await pickTopicForRotation(strapi);
+    if (!trending) {
+      strapi.log.warn(
+        '[blog-scheduler] generate_quick skipped — no active trending topics'
+      );
+      return { skipped: true, reason: 'no_trending_topics' };
+    }
+
+    const angle =
+      trending.suggestedAngles.length > 0
+        ? trending.suggestedAngles[
+            Math.floor(Math.random() * trending.suggestedAngles.length)
+          ]
+        : undefined;
+
+    const allowedCategories = await listCategoryNames(strapi);
+    if (allowedCategories.length === 0) {
+      strapi.log.warn(
+        '[blog-scheduler] generate_quick skipped — no blog categories in Strapi'
+      );
+      return { skipped: true, reason: 'no_categories' };
+    }
+
+    const cronCategoryName = job.categoryName ?? undefined;
+
+    quickGenerateInProgress = true;
+
+    strapi.log.info(
+      `[blog-scheduler] generate_quick — started, topic="${trending.id}" angle="${angle ?? 'none'}"`
+    );
+
+    try {
+      const generated = await strapi
+        .service('api::blog.blog-generate-enhanced')
+        .generateEnhanced({
+          topic: trending.title,
+          angle,
+          trendingTopicId: trending.id,
+          trendingTopic: trending,
+          researchContext: `${trending.keyDetails} ${trending.whyHot}`,
+          allowedCategories,
+          categoryName: cronCategoryName,
+        });
+
+      assertAiSuggestedCategoryAllowed(
+        generated.suggestedCategory,
+        allowedCategories,
+        cronCategoryName
+      );
+
+      let scheduledPublishAt: Date | null = null;
+      if (!job.publishImmediately && job.delayHours > 0) {
+        scheduledPublishAt = new Date(Date.now() + job.delayHours * 60 * 60 * 1000);
+      }
+
+      const entry = await createBlogFromGenerated(strapi, generated, {
+        blogAuthorSlug: job.blogAuthorSlug ?? undefined,
+        breadcrumbName: job.breadcrumbName ?? undefined,
+        categoryName: cronCategoryName,
+        scheduledPublishAt,
+        status: job.publishImmediately ? 'published' : 'draft',
+      });
+
+      strapi.log.info(
+        `[blog-scheduler] generate_quick — blog created documentId=${entry.documentId} topic="${trending.id}" angle="${angle ?? ''}" scheduledPublishAt=${scheduledPublishAt?.toISOString() ?? 'immediate'}`
+      );
+
+      await disableJob(strapi, 'generate_quick');
+      strapi.log.info('[blog-scheduler] generate_quick — auto-disabled after successful run');
+
+      return {
+        skipped: false,
+        documentId: entry.documentId,
+        title: entry.title,
+        trendingTopicId: trending.id,
+        angle,
+      };
+    } catch (err) {
+      if (isInsufficientBalanceError(err)) {
+        strapi.log.error(
+          '[blog-scheduler] generate_quick skipped — DeepSeek insufficient balance (402)'
+        );
+        return { skipped: true, reason: 'insufficient_balance' };
+      }
+      if (err instanceof BlogCreateFromGeneratedError) {
+        strapi.log.error(`[blog-scheduler] ${err.message}`);
+      } else {
+        strapi.log.error('[blog-scheduler] generate_quick failed:', err);
+      }
+      throw err;
+    } finally {
+      quickGenerateInProgress = false;
     }
   },
 });
